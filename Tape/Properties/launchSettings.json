@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "TapeConsole": {
+      "commandName": "Project",
+      "commandLineArgs": "D:\\MEDIA\\COMPUTER\\fighter_pilot-space_war.wav --start=0 --end=0 --version=0 --frequency=1000000 code --baud=297"
+    }
+  }
+}
