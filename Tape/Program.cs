@@ -30,8 +30,8 @@ namespace TapeConsole
             var root = new RootCommand
                 {
                     new Argument<string>("filename"),
-                    new Option<int?>(new string[] { "--version", "/v" }, getDefaultValue: () => 0, "The tape version"),
-                    new Option<int?>(new string[] { "--frequency", "/f"}, getDefaultValue: () => 1000000, "The processor frequency in Hz"),
+                    new Option<int?>(new string[] { "--version", "/V" }, getDefaultValue: () => 0, "The tape version"),
+                    new Option<int?>(new string[] { "--frequency", "/F"}, getDefaultValue: () => 1000000, "The processor frequency in Hz"),
                     //new Option<string?>(new string[] { "--name", "/p" }, "The filename"),
                     //new Option<string?>(new string[] { "--path", "/n" }, "The file path")
                     new Option<double?>(new string[] {"--start", "/S"}, getDefaultValue: () => 0, "Offset to start of data in seconds"),
@@ -45,14 +45,14 @@ namespace TapeConsole
 
             Command code = new Command("code", "Generate ascii format file")
             {
-                new Option<int?>(new string[] { "--baud","/b" },  getDefaultValue: () => 297, "Baud rate"),
-                new Option<int>(new string[] { "--output", "/o" }, description: "The Output filename"),
+                new Option<int?>(new string[] { "--baud","/B" },  getDefaultValue: () => 297, "Baud rate"),
+                new Option<int>(new string[] { "--output", "/O" }, description: "The Output filename"),
             };
             code.Handler = CommandHandler.Create<string, int, int, double, double, int>(Tap2Code);
 
             Command tape = new Command("tape", "Generate tape format file")
             {
-                new Option<int>(new string[] { "--output", "/o" }, description: "The Output filename"),
+                new Option<int>(new string[] { "--output", "/O" }, description: "The Output filename"),
             };
             tape.Handler = CommandHandler.Create<string, int, int, double, double>(Wave2Tape);
 
