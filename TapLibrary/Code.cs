@@ -148,6 +148,7 @@ namespace TapeLibrary
 
         #endregion
         #region Methods
+
         /// <summary>
         /// Convert the tape file to a ASCII file
         /// </summary>
@@ -172,10 +173,26 @@ namespace TapeLibrary
                         double sum = 0; // Duration in seconds
                         int cycle = 0;
 
+                        // read forwards from i
+
+                        double previous = 0;
+                        double average = 0;
+
                         for (int i = 0; i < _tape.Count - count; i++)
                         {
-                            start = _tape[count + i].Start;              // This should be in seconds
-                            double length = _tape[count + i].Length;     // This should already be in seconds
+                            Debug.WriteLine("Interval {0}",i);
+
+                            start = _tape[count + i].Start;                 // This should be in seconds
+                            double length = _tape[count + i].End - start;   // This will be in seconds
+                            if (average != 0)
+                            {
+                                average = (average + length) / 2;
+                            }
+                            else
+                            {
+                                average = length;
+                            }
+
                             if (length == 0)
                             {
                                 Debug.WriteLine("Data error");
@@ -184,19 +201,21 @@ namespace TapeLibrary
                             else
                             {
                                 Debug.WriteLine("Count={0} Start={1} i={2} Length={3} sum={4}", count + i + 20, start, i, length, sum);
-                                if (sum + length < interval)
+                                if ((sum + length) < interval)
                                 {
-                                    sum = sum + _tape[count + i].Length;
+                                    sum = sum + length;
                                     cycle = cycle + 1;
                                 }
                                 else
                                 {
-                                    Debug.WriteLine("Too long Length={0}", sum + _tape[count + i].Length);
+                                    Debug.WriteLine("Too long Length={0} > {1}", sum + length, interval);
                                     break;
                                 }
                             }
-                        }
+                         }
+
                         Debug.WriteLine("Cycles=" + cycle + " Sum=" + sum);
+
                         if (cycle == 4)
                         {
                             Debug.WriteLine("Bit=0");
@@ -249,6 +268,7 @@ namespace TapeLibrary
                         {
                             Debug.WriteLine("Noise");
                             Console.WriteLine("Noise");
+                            Debug.WriteLine("average={0}", average);
                         }
                     }
                 }

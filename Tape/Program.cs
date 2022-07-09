@@ -38,9 +38,14 @@ namespace TapeConsole
                     new Option<double?>(new string[] {"--end", "/E"}, getDefaultValue: () => 0, "Offset to end of data in seconds"),
             };
 
-            Command histogram = new Command("histogram", "Generate histogram")
+            Command wavelength = new Command("wavelength", "Generate wavelength histogram")
             {
-                Handler = CommandHandler.Create<string, int, int, double, double>(Histogram)
+                Handler = CommandHandler.Create<string, int, int, double, double>(Wavelength)
+            };
+
+            Command amplitude = new Command("amplitude", "Generate amplitude histogram")
+            {
+                Handler = CommandHandler.Create<string, int, int, double, double>(Amplitude)
             };
 
             Command code = new Command("code", "Generate ascii format file")
@@ -56,7 +61,8 @@ namespace TapeConsole
             };
             tape.Handler = CommandHandler.Create<string, int, int, double, double>(Wave2Tape);
 
-            root.Add(histogram);
+            root.Add(wavelength);
+            root.Add(amplitude);
             root.Add(code);
             root.Add(tape);
 
@@ -84,12 +90,80 @@ namespace TapeConsole
 
         }
 
-        static void Histogram(string filename, int version, int frequency, double start, double end)
+        static void Amplitude(string filename, int version, int frequency, double start, double end)
+        {
+            string path = Path.GetDirectoryName(filename);
+            string name = Path.GetFileName(filename);
+            Wave wave = new Wave(path, name);
+            wave.Read();
+
+            Tape tape = new Tape(wave)
+            {
+                Start = new TimeSpan(Convert.ToInt64(1e7 * start)),     // Should now be in ticks from seconds
+                End = new TimeSpan(Convert.ToInt64(1e7 * end)),         // Should now be in ticks from seconds
+                Version = version
+            };
+            tape.Analyse();
+
+            SortedDictionary<int, double> histogram = new SortedDictionary<int, double>();
+            for (int i = 0; i <= 256; i++)
+            {
+                histogram.Add(i, 0);
+            }
+
+            // The sample range is already limited by start and end
+
+            for (int count = 0; count < tape.Count; count++)
+            {
+                double amplitude = Math.Abs(tape[count].Maximum - tape[count].Minimum);
+                double wavelength = (tape[count].End - tape[count].Start) / wave.SampleRate;
+                UInt32 cycleLength = (UInt32)(wavelength * frequency / 8);   // in clock cycles
+
+                if ((cycleLength > 255) || (cycleLength < 0))
+                {
+                    try
+                    {
+                        histogram[(int)cycleLength] = (histogram[(int)cycleLength] + amplitude) / 2;
+                    }
+                    catch
+                    {
+                        histogram.Add((int)cycleLength, amplitude);
+                    }
+                }
+                else
+                {
+                    byte interval = (byte)cycleLength;
+                    if (histogram[interval] != 0)
+                    {
+                        histogram[interval] = (histogram[interval] + amplitude) / 2;
+                    }
+                    else
+                    {
+                        histogram[interval] = amplitude;
+                    }
+                }
+            }
+
+            foreach (KeyValuePair<int, double> kvp in histogram)
+            {
+                int interval = kvp.Key;
+                double amplitude = kvp.Value;
+                if (amplitude != 0)
+                {
+                    Console.WriteLine(interval.ToString("000") + " " + amplitude);
+                }
+            }
+
+        }
+
+        static void Wavelength(string filename, int version, int frequency, double start, double end)
         {
             string path = Path.GetDirectoryName(filename);
             string name = Path.GetFileName(filename);
             Tape tape = new Tape
             {
+                Start = new TimeSpan(Convert.ToInt64(1e7 * start)),     // Should now be in ticks from seconds
+                End = new TimeSpan(Convert.ToInt64(1e7 * end)),         // Should now be in ticks from seconds
                 Version = version
             };
             tape.Read(path, name);
@@ -100,31 +174,35 @@ namespace TapeConsole
                 histogram.Add(i, 0);
             }
 
+            // The sample range is already limited by start and end
+
             for (int count = 0; count < tape.Count; count++)
             {
-                if (tape[count].Start > start)
+                double wavelength = (tape[count].End - tape[count].Start);
+                UInt32 cycleLength = (UInt32)(wavelength * frequency / 8);   // in clock cycles
+
+                if ((cycleLength > 255) || (cycleLength < 0))
                 {
-                    if ((end == 0) || (tape[count].Start < end))
+                    try
                     {
-                        double length = tape[count].Length;
-                        length = length * frequency / 8;
-                        int interval = (int)length;
-                        if (interval > 256)
-                        {
-                            try
-                            {
-                                histogram.Add(interval, 0);
-                            }
-                            catch { }
-                        }
-                        histogram[interval] = histogram[interval] + 1;
+                        histogram[(int)cycleLength] = histogram[(int)cycleLength] + 1;
                     }
+                    catch 
+                    {
+                        histogram.Add((int)cycleLength, 1);
+                    }
+                }
+                else
+                {
+                    byte interval = (byte)cycleLength;
+                    histogram[interval] = histogram[interval] + 1;
                 }
             }
 
-            for (int interval = 0; interval < histogram.Count; interval++)
+            foreach (KeyValuePair<int, long> kvp in histogram)
             {
-                long count = histogram[interval];
+                int interval = kvp.Key;
+                long count = kvp.Value;
                 if (count != 0)
                 {
                     Console.WriteLine(interval.ToString("000") + " " + count);
@@ -144,7 +222,7 @@ namespace TapeConsole
                 End = new TimeSpan(Convert.ToInt64(1e7 * end)),         // Should now be in ticks from seconds
                 Version = version
             };
-            tape.Convert();
+            tape.Analyse();
             tape.Write(path, name, true);
         }
     }

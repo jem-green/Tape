@@ -192,7 +192,8 @@ namespace TapeLibrary
                                 {
                                     Int32[] asInt32 = new Int32[nValues];
                                     Buffer.BlockCopy(byteArray, 0, asInt32, 0, bytes);
-                                    asFloat = Array.ConvertAll(asInt32, e => e / (float)Int32.MaxValue);
+                                    //asFloat = Array.ConvertAll(asInt32, e => e / (float)Int32.MaxValue);
+                                    asFloat = Array.ConvertAll(asInt32, e => (float)e);
                                     break;
                                 }
                             case 16:

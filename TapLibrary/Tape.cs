@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Reflection.PortableExecutable;
 
 namespace TapeLibrary
 {
@@ -56,21 +57,19 @@ namespace TapeLibrary
         private TimeSpan _end = new TimeSpan(0);
         private float _threshold = 0;
 
-        public struct Cycle
+    public struct Cycle
         {
             double _start;
             double _mid;
             double _end;
-            double _length;
-            float _maximum;
-            float _minimum;
+            double _maximum;
+            double _minimum;
 
-            public Cycle(double start, double mid, double end, double length, float max, float min)
+            public Cycle(double start, double mid, double end, double max, double min)
             {
                 _start = start;
                 _mid = mid;
                 _end = end;
-                _length = length;
                 _maximum = max;
                 _minimum = min;
             }
@@ -99,17 +98,31 @@ namespace TapeLibrary
                 }
             }
 
-            public double Length
+            public double Maximum
             {
                 get
                 {
-                    return( _length);
+                    return (_maximum);
                 }
                 set
                 {
-                    _length = value;
+                    _maximum = value;
                 }
             }
+
+            public double Minimum
+            {
+                get
+                {
+                    return (_minimum);
+                }
+                set
+                {
+                    _minimum = value;
+                }
+            }
+
+
         }
 
         #endregion
@@ -177,6 +190,13 @@ namespace TapeLibrary
                 return (_data[index]);
             }
         }
+        public int Count
+        {
+            get
+            {
+                return (_data.Count);
+            }
+        }
 
         public int Frequency
         {
@@ -190,11 +210,15 @@ namespace TapeLibrary
             }
         }
 
-        public int Count
+        public char[] Header
         {
             get
             {
-                return (_data.Count);
+                return (_header);
+            }
+            set
+            {
+                _header = value;
             }
         }
 
@@ -291,14 +315,15 @@ namespace TapeLibrary
 
 
         /// <summary>
-        /// Convert the wave file to a series of cycles
+        /// Convert the wave file to a series of cycles by calulating
+        /// the cycle length.
         /// </summary>
-        public void Convert()
+        public void Analyse()
         {
-            float max = float.MinValue;
-            float min = float.MaxValue;
+            double max = double.MinValue;
+            double min = double.MaxValue;
             bool rising = false;
-            float previous = 0;
+            double previous = 0;
             double start = 0;
             double mid = 0;
             double end = 0;
@@ -315,7 +340,7 @@ namespace TapeLibrary
                 {
                     if ((_end.TotalSeconds == 0) || (span.TotalSeconds < _end.TotalSeconds))
                     {
-                        float x = _wave.Left[count];    // Assume that this is mono
+                        double x = (double)_wave.Left[count];    // Assume that this is mono
 
                         // May need a threshold
 
@@ -342,8 +367,8 @@ namespace TapeLibrary
                                     Debug.Print("Count=" + (count - 1) + " x=" + previous);
 
                                     // Start of pulse identified
-                                    max = float.MinValue;
-                                    min = float.MaxValue;
+                                    max = double.MinValue;
+                                    min = double.MaxValue;
                                     start = count - 1 - previous / (-previous + x);    // in seconds
 
                                     Debug.WriteLine("start=" + span);
@@ -358,20 +383,39 @@ namespace TapeLibrary
                                     end = count - 1 - previous / (-previous + x);
 
                                     Debug.WriteLine("End=" + span);
-                                    
+
                                     if ((start > 0) && (mid > 0))
                                     {
                                         if ((Math.Abs(max) > _threshold) || (Math.Abs(min) > _threshold))
                                         {
-                                            _data.Add(new Cycle(start, mid, end, end - start, max, min));
+                                            // Store the cycle as proportions of the sample rate rather
+                                            // than converting to seconds at this stage.
 
-                                            Debug.WriteLine("offset=" + span + " wavelength=" + (end - start) + " min=" + min + " max=" + max);
+                                            if (start <= end)
+                                            {
+
+                                                _data.Add(new Cycle(start / _wave.SampleRate, mid / _wave.SampleRate, end / _wave.SampleRate, max, min));
+
+                                                // What needs to happen is that start, mid and end are converted into seconds
+                                                // from samples so that when we save there is a common format. Currently
+                                                // reading a tap file and then saving it will do another conversion
+                                                // 
+
+
+
+
+                                                Console.WriteLine("offset=" + span + " wavelength=" + (end - start) + " min=" + min + " max=" + max);
+                                            }
+                                            else
+                                            {
+                                                //throw new InvalidDataException();
+                                            }
                                         }
                                         start = end;
                                         max = float.MinValue;
                                         min = float.MaxValue;
 
-                                            Debug.WriteLine("new start=" + span);
+                                        Debug.WriteLine("new start=" + span);
 
                                         mid = 0;
                                         end = 0;
@@ -462,12 +506,14 @@ namespace TapeLibrary
 
             BinaryWriter binaryWriter = new BinaryWriter(new FileStream(filenamePath, FileMode.OpenOrCreate));
             binaryWriter.Seek(0, SeekOrigin.Begin); // Move to start of the file
-            binaryWriter.Write(_header);            // Write the header (12)
+            binaryWriter.Write(_header,0,12);       // Write the header (12)
             binaryWriter.Write(_version);           // Write the version (1)
-            binaryWriter.Write(new byte[3]);        // Write optional future features (3)
+            binaryWriter.Write(new byte[3]);        // Write optional future features (3) empty
 
             UInt32 length = (UInt32)_data.Count;
-            binaryWriter.Write(length);             // Write the length (4)
+            binaryWriter.Write(length);             // Write the length (4) as unsigned integer
+
+            TimeSpan span;
 
             // Temp
 
@@ -476,41 +522,51 @@ namespace TapeLibrary
             for(int count=0; count<length; count++)
             {
                 Cycle cycle = _data[count];
-                if ((cycle.Start / _wave.SampleRate) > 2.7e10)   // Seconds
-                {
-                    Debug.WriteLine("Start={0}", (cycle.Start / _wave.SampleRate));
-                }
+                span = TimeSpan.FromSeconds(cycle.Start);  // in seconds
+
+                // Convert the cycle length from the sample size to T / 8 states based on the clock frequency.
 
                 byte interval;
-                double c = (cycle.End - cycle.Start) / _wave.SampleRate * _clockFrequency / 8;
-                UInt32 cycles = (UInt32)(c + 0.5);
+                double wavelength = cycle.End - cycle.Start;
 
-                if (cycles > 255)
+
+                // Look at options to adjust the cycle length based on the amplitude of the wave.
+                // It appears that the hugher cycles have a lower amplitude.
+
+
+                UInt32 cycleLength = (UInt32)(wavelength * _clockFrequency / 8);   // in clock cycles
+
+                if (cycleLength > 255)
                 {
                     interval = 0;
                     if (_version == 0)
                     {
-                        binaryWriter.Write(interval);              // Write the data
+                        binaryWriter.Write(interval);              // Write zero data to indicate long pulse
                     }
                     else
                     {
-                        cycles = (UInt32)(cycle.Length / _wave.SampleRate * _clockFrequency);
-                        byte[] bytes = BitConverter.GetBytes(cycles);
-                        binaryWriter.Write(interval);               // Write the data
-                        binaryWriter.Write(bytes, 0, 3);            // Only write 24 bits of data
+                        cycleLength = (UInt32)(wavelength * _clockFrequency);   // Remove 8bit scaling
+                        byte[] bytes = BitConverter.GetBytes(cycleLength);      //
+                        binaryWriter.Write(interval);                           // Write the data
+                        binaryWriter.Write(bytes, 0, 3);                        // Only write 24 bits of data
                         length = (UInt16)(length + 3);
+
+                        Console.WriteLine("offset=" + span + " wavelength=" + wavelength);
                     }
                 }
                 else
                 {
-                    interval = (byte)cycles;
+                    interval = (byte)cycleLength;
                     previous = interval;
                     binaryWriter.Write(interval);              // Write the data
+
+                    Console.WriteLine("offset=" + span + " wavelength=" + wavelength);
+
                 }
             }
 
             binaryWriter.Seek(16, SeekOrigin.Begin);    // Move relative to start of the file
-            binaryWriter.Write(length);                 // Rewrite the length
+            binaryWriter.Write(length);                 // Rewrite the length as there may have been some long pulses
 
             binaryWriter.Flush();
             binaryWriter.Close();
@@ -572,36 +628,36 @@ namespace TapeLibrary
                         // Test aligning to specific values
 
 
-                        if ((interval > 50) && (interval < 60))
-                        {
-                            interval = 52;
-                        }
-                        else if ((interval >= 60) && (interval < 80))
-                        {
-                            if (previous >= interval)
-                            {
-                                interval = 104;
-                            }
-                            else
-                            {
-                                interval = 52;
-                            }
-                        }
-                        else if ((interval >= 80) && (interval < 90))
-                        {
-                            if (previous <= interval)
-                            {
-                                interval = 52;
-                            }
-                            else
-                            {
-                                interval = 104;
-                            }
-                        }
-                        else if ((interval >= 90) && (interval < 110))
-                        {
-                            interval = 104;
-                        }
+                        //if ((interval > 50) && (interval < 60))
+                        //{
+                        //    interval = 52;  // 
+                        //}
+                        //else if ((interval >= 60) && (interval < 80))
+                        //{
+                        //    if (previous >= interval)
+                        //    {
+                        //        interval = 104;
+                        //    }
+                        //    else
+                        //    {
+                        //        interval = 52;
+                        //    }
+                        //}
+                        //else if ((interval >= 80) && (interval < 90))
+                        //{
+                        //    if (previous <= interval)
+                        //    {
+                        //        interval = 52;
+                        //    }
+                        //    else
+                        //    {
+                        //        interval = 104;
+                        //    }
+                        //}
+                        //else if ((interval >= 90) && (interval < 110))
+                        //{
+                        //    interval = 104;
+                        //}
 
                         previous = interval;
 
@@ -631,6 +687,11 @@ namespace TapeLibrary
                         //        }
                         //}
 
+                        // Convert back into seconds
+                        // but issue i have is this is not the wave 
+                        // sample intervals, so dont like the approach
+                        // with the cycles object hold two different types of value
+                        // 
 
                         if (interval == 0)
                         {
@@ -655,10 +716,9 @@ namespace TapeLibrary
                         }
 
                         Cycle cycle = new Cycle();
-                        start = start + cycles;
-                        cycle.Length = cycles;
-                        //cycle.Length = (double)interval;    // Check
                         cycle.Start = start;
+                        start = start + cycles;     // this is in seconds now not samples
+                        cycle.End = start;
                         _data.Add(cycle);
                     }
                     errorCode = 0;
