@@ -14,10 +14,18 @@ namespace TapeLibrary
         private Tape _tape;
         private string _path = null;
         private string _name = null;
-        private TimeSpan _start = new TimeSpan(0);
-        private TimeSpan _end = new TimeSpan(0);
+        private TimeSpan _start = new TimeSpan(0);  // In seconds
+        private TimeSpan _end = new TimeSpan(0);    // In seconds
         private List<byte> _data;
-        private int _baudRate = 300;
+        private int _baudRate = 300;                // In Hz
+
+        private enum State
+        {
+            None = -1,
+            Noise = 0,
+            Header = 1,
+            Data = 2
+        }
 
         #endregion
         #region Constructors
@@ -154,14 +162,19 @@ namespace TapeLibrary
         /// </summary>
         public void Convert()
         {
-            TapeLibrary.Packet packet = new TapeLibrary.Packet(Packet.Parity.None, Packet.StartBits.Space, Packet.StopBits.Two, 8);
+            //TapeLibrary.Packet packet = new TapeLibrary.Packet(Packet.Parity.None, Packet.StartBits.Space, Packet.StopBits.Two, 8);
+            TapeLibrary.Packet packet = new TapeLibrary.Packet(Packet.Parity.None, Packet.StartBits.Space, Packet.StopBits.None, 8);
+
             packet.Clear();
             _data.Clear();
+            State state;
+            double headerLength = 0;
 
             byte data = 0;
-
             double start = 0;
             double interval = 1 / (double)_baudRate; // This is in seconds
+
+            state = State.None;
 
             for (int count = 0; count < _tape.Count; count++)
             {
@@ -170,17 +183,17 @@ namespace TapeLibrary
                     if ((_end.TotalSeconds == 0) || (_tape[count].Start < _end.TotalSeconds))
                     {
 
-                        double sum = 0; // Duration in seconds
-                        int cycle = 0;
+                        double sum = 0;     // Duration in seconds
+                        int cycle = 0;      // 
 
-                        // read forwards from i
+                        // read forwards from count
 
                         double previous = 0;
                         double average = 0;
 
                         for (int i = 0; i < _tape.Count - count; i++)
                         {
-                            Debug.WriteLine("Interval {0}",i);
+                            Debug.WriteLine("Interval {0}", i);
 
                             start = _tape[count + i].Start;                 // This should be in seconds
                             double length = _tape[count + i].End - start;   // This will be in seconds
@@ -201,31 +214,42 @@ namespace TapeLibrary
                             else
                             {
                                 Debug.WriteLine("Count={0} Start={1} i={2} Length={3} sum={4}", count + i + 20, start, i, length, sum);
-                                if ((sum + length) < interval)
+                                if ((sum + length) <= interval)
                                 {
                                     sum = sum + length;
                                     cycle = cycle + 1;
                                 }
                                 else
                                 {
-                                    Debug.WriteLine("Too long Length={0} > {1}", sum + length, interval);
-                                    break;
+                                    if ((sum + length - interval - average / 32) < 0) // average / 32)
+                                    {
+                                        sum = sum + length;
+                                        cycle = cycle + 1;
+                                    }
+                                    else
+                                    {
+                                        Debug.WriteLine("Too long Length={0} > {1}", sum + length, interval);
+                                        break;
+                                    }
                                 }
                             }
-                         }
+                            previous = length;
+                        }
 
                         Debug.WriteLine("Cycles=" + cycle + " Sum=" + sum);
 
                         if (cycle == 4)
                         {
-                            Debug.WriteLine("Bit=0");
-                            Console.WriteLine("Bit = 0");
-                            packet.Add(false);
+                            if (state != State.None)
+                            {
+                                Debug.WriteLine("Bit=0");
+                            }
+                            packet.Add(false);  // Add a zero bit to the packet
                             if (packet.IsError == false)
                             {
                                 if (packet.IsComplete == true)
                                 {
-                                    data = packet.Get();
+                                    data = packet.Get();    // Get the byte
                                     _data.Add(data);
                                     packet.Clear();
                                     Debug.WriteLine("Byte=" + data);
@@ -234,19 +258,26 @@ namespace TapeLibrary
                             }
                             else
                             {
-                                Debug.WriteLine("Error " + packet.Error);
-                                Console.WriteLine("Error " + packet.Error);
+                                if (state != State.None)
+                                {
+                                    Debug.WriteLine("Error " + packet.ErrorDescription);
+                                    Console.WriteLine("Error " + packet.ErrorDescription);
+                                }
                                 packet.Clear(); // No start bit
+
                             }
                             count = count + 3;
                         }
                         else if (cycle == 8)
                         {
-                            Console.WriteLine("Bit = 1");
-                            Debug.WriteLine("Bit=1");
-                            packet.Add(true);
+                            if (state != State.None)
+                            {
+                                Debug.WriteLine("Bit=1");
+                            }
+                            packet.Add(true);    // Add a one bit to the packet
                             if (packet.IsError == false)
                             {
+                                state = State.Data;
                                 if (packet.IsComplete == true)
                                 {
                                     data = packet.Get();
@@ -258,23 +289,40 @@ namespace TapeLibrary
                             }
                             else
                             {
-                                Debug.WriteLine("Error " + packet.Error);
-                                Console.WriteLine("Error " + packet.Error);
+                                if (state == State.Data)
+                                {
+                                    Debug.WriteLine("Error " + packet.ErrorDescription);
+                                    Console.WriteLine("Error " + packet.ErrorDescription);
+                                }
+                                if (state == State.None)
+                                {
+                                    headerLength = headerLength + 1;
+                                    if (headerLength > 8)
+                                    {
+                                        state = State.Header;
+                                    }
+                                }
                                 packet.Clear(); // No start bit
                             }
                             count = count + 7;
                         }
                         else
                         {
-                            Debug.WriteLine("Noise");
-                            Console.WriteLine("Noise");
-                            Debug.WriteLine("average={0}", average);
+                            if (state != State.None)
+                            {
+                                Debug.WriteLine("Noise");
+                                Console.WriteLine("Noise");
+                                Debug.WriteLine("average={0}", average);
+                            }
+                            if (state == State.Header)
+                            {
+                                state = State.None;
+                                headerLength = 0;
+                            }
                         }
                     }
                 }
             }
-            #endregion
-
         }
 
         public void Write(bool overwrite)
@@ -329,5 +377,7 @@ namespace TapeLibrary
             binaryWriter.Close();
             binaryWriter.Dispose();
         }
+
+        #endregion
     }
 }

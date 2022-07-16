@@ -11,15 +11,21 @@ TapeConsole [options] <filename> [command]
 <filename>
 
 ### Options:
-/v, --version <version>        The tape version
+/v, --version <version>			The tape version
   
-/f, --frequency <frequency>    The processor frequency in Hz
+/f, --frequency <frequency>		The processor frequency in Hz
   
-/S, --start <start>            Offset to start of data in seconds
+/S, --start <start>				Offset to start of data in seconds
   
-/E, --end <end>                Offset to end of data in seconds
+/E, --end <end>					Offset to end of data in seconds
 
 ### Commands:
-histogram    Generate histogram
-code         Generate ascii format file
-tape         Generate tape format file
+ wavelength   Generate a wavelength histogram
+ 
+ amplitude    Generate a amplitude histogram
+ 
+ tape         Generate tape format file
+ 
+ code         Generate ascii format file
+
+/B, --baud <baud rate>			The baudrate in Hz

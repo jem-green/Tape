@@ -11,7 +11,8 @@ namespace TapeLibrary
         StartBits _startBits = StartBits.None;
         int _dataBits = 8;
         byte _data = 0;
-        int _state = -1;
+        Error _state = Error.None;
+        int _totalBits = 8;
 
         int _index = 0;
         int _start = 0;
@@ -41,6 +42,15 @@ namespace TapeLibrary
             Space
         }
 
+        public enum Error : int
+        {
+            None = 0,
+            Start = -1,
+            Stop = -2,
+            Unknown = -3,
+            Overrun = -4,
+        }
+
         public Packet(Parity parity, StartBits startBits, StopBits stopBits, int dataBits)
         {
             _parity = parity;
@@ -60,13 +70,20 @@ namespace TapeLibrary
             {
                 _stop = 2;
             }
+            _totalBits = _start + _dataBits + _stop;
+
+        }
+
+        public int Index
+        {
+            get { return _index; }
         }
 
         public bool IsComplete
         {
             get
             {
-                if (_state == 1)
+                if (_index == _totalBits)
                 {
                     return (true);
                 }
@@ -92,17 +109,21 @@ namespace TapeLibrary
             }
         }
 
-        public string Error
+        public string ErrorDescription
         {
             get
             {
-                if (_state == -1)
+                if (_state == Error.Start)
                 {
                     return ("No start bit");
                 }
-                else if (_state == -2)
+                else if (_state == Error.Stop)
                 {
-                    return ("No stop bit");
+                    return ("No stop bit(s)");
+                }
+                else if (_state == Error.Overrun)
+                {
+                    return ("Data overrrun");
                 }
                 else
                 {
@@ -110,7 +131,6 @@ namespace TapeLibrary
                 }
             }
         }
-
 
         public void Clear()
         {
@@ -130,7 +150,7 @@ namespace TapeLibrary
             // Data bits
             // Stop bits
 
-            _state = -1;
+            _state = Error.Unknown;
 
             if (_index < _start)
             {
@@ -138,22 +158,22 @@ namespace TapeLibrary
                 {
                     if (bit == false)
                     {
-                        _state = -1;  // Incorrect bit
+                        _state = Error.Start; ;  // Incorrect bit
                     }
                     else
                     {
-                        _state = 0; // Start bit
+                        _state = Error.None; // Start bit
                     }
                 }
                 else if (_startBits == StartBits.Space)
                 {
                     if (bit == true)
                     {
-                        _state = -1;  // Incorrect bit
+                        _state = Error.Start;  // Incorrect bit
                     }
                     else
                     {
-                        _state = 0; // Start bit
+                        _state = Error.None; // Start bit
                     }
                 }
                 _index++;
@@ -166,30 +186,28 @@ namespace TapeLibrary
                     _data = (byte)(_data | 128);
                 }
                 _index++;
-                _state = 0;
+                _state = Error.None;
             }
             else if ((_index >= (_start + _dataBits)) && (_index < (_start + _dataBits + _stop)))
             {
                 if (bit == true)
                 {
-                    _state = 0;
+                    _state = Error.None;
                 }
                 else
                 {
-                    _state = -2;
+                    _state = Error.Stop;
                 }
                 _index++;
             }
-
-            if (_index == (_start + _dataBits + _stop))
+            else if (_index == _totalBits)
             {
-                if (_state == 0)
-                {
-                    _state = 1;
-                }
+                _state = Error.None;
             }
-
+            else if (_index > _totalBits)
+            {
+                _state = Error.Overrun;
+            }
         }
-
     }
 }

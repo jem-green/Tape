@@ -57,7 +57,7 @@ namespace TapeLibrary
         private TimeSpan _end = new TimeSpan(0);
         private float _threshold = 0;
 
-    public struct Cycle
+        public struct Cycle
         {
             double _start;
             double _mid;
@@ -121,8 +121,6 @@ namespace TapeLibrary
                     _minimum = value;
                 }
             }
-
-
         }
 
         #endregion
@@ -313,12 +311,145 @@ namespace TapeLibrary
         #endregion
         #region Methods
 
+        public void Analyse()
+        {
+            TimeSpan span;
+            int length = _data.Count;
+            UInt32 previous = 0;
+
+            for (int count = 0; count < length; count++)
+            {
+                Cycle cycle = _data[count];
+
+                span = TimeSpan.FromSeconds(cycle.Start);  // in seconds
+
+                if (span.TotalSeconds > _start.TotalSeconds)  // Offset in seconds
+                {
+                    if ((_end.TotalSeconds == 0) || (span.TotalSeconds < _end.TotalSeconds))
+                    {
+                        // Convert the cycle length from the sample size to T / 8 states based on the clock frequency.
+
+                        double wavelength = cycle.End - cycle.Start;
+                        double temp = wavelength * (double)_clockFrequency / 8;
+
+                        UInt32 cycleLength = (UInt32)(Math.Round(temp));   // in clock cycles
+
+                        int mode = 0;
+
+                        if (mode == 0)
+                        {
+                            double newWavelength = (double)(cycleLength * 8) / _clockFrequency;
+                            cycle.End = cycle.Start + newWavelength;
+                            _data[count] = cycle;
+                        }
+                        else if (mode == 1)
+                        {
+                            // Test aligning to specific values
+
+                            // S = 2400 = 0.0004166666 = 52
+                            // L = 1200 = 0.0008333333 = 104
+                            // M = (2400 + 1200) /2 = 1800 = 0.000555555
+
+                            if (cycleLength < 50)
+                            {
+                                Debug.WriteLine("Too short offset={0} wavellength ={1}", cycle.Start, cycleLength);
+                            }
+                            else if ((cycleLength >= 50) && (cycleLength < 60))
+                            {
+                                cycleLength = 52;  // 
+                            }
+                            else if ((cycleLength >= 60) && (cycleLength < 80))
+                            {
+                                if (previous >= cycleLength)
+                                {
+                                    cycleLength = 52;
+                                }
+                                else
+                                {
+                                    cycleLength = 104;
+                                }
+                            }
+                            else if ((cycleLength >= 80) && (cycleLength < 90))
+                            {
+                                if (previous <= wavelength)
+                                {
+                                    cycleLength = 104;
+                                }
+                                else
+                                {
+                                    cycleLength = 52;
+                                }
+                            }
+                            else if ((cycleLength >= 90) && (cycleLength < 110))
+                            {
+                                cycleLength = 104;
+                            }
+                            else
+                            {
+                                Debug.WriteLine("Too long offset={0} wavellength ={1}", cycle.Start, cycleLength);
+                            }
+
+                            double newwavelength = (double)(cycleLength * 8) / _clockFrequency;
+                            cycle.End = cycle.Start + newwavelength;
+                            _data[count] = cycle;
+
+                            previous = cycleLength;
+
+                        }
+                        else if (mode == 2)
+                        {
+                            // Test grouping to specific values
+
+                            // S = 2400 = 0.0004166666 = 52
+                            // L = 1200 = 0.0008333333 = 104
+
+                            switch (cycleLength)
+                            {
+                                case 48: // 0x30
+                                case 49: // 0x31
+                                case 50: // 0x32
+                                case 51: // 0x33
+                                case 53: // 0x35
+                                case 54: // 0x36
+                                case 55: // 0x37
+                                    {
+                                        cycleLength = 52;
+                                        break;
+                                    }
+                                case 102: // 0x66
+                                case 103: // 0x67
+                                case 105: // 0x69
+                                case 106: // 0x6a
+                                case 107: // 0x6b
+                                case 108: // 0x6c
+                                case 109: // 0x6d
+                                    {
+                                        cycleLength = 104;
+                                        break;
+                                    }
+                                default:
+                                    {
+                                        cycleLength = 0;
+                                        break;
+                                    }
+                            }
+
+                            double newwavelength = (double)(cycleLength * 8) / _clockFrequency;
+                            cycle.End = cycle.Start + newwavelength;
+                            _data[count] = cycle;
+
+                            previous = cycleLength;
+                        }
+                    }
+                }
+            }
+        }
 
         /// <summary>
         /// Convert the wave file to a series of cycles by calulating
         /// the cycle length.
         /// </summary>
-        public void Analyse()
+        public void Convert()
         {
             double max = double.MinValue;
             double min = double.MaxValue;
@@ -364,7 +495,7 @@ namespace TapeLibrary
                                 if (start == 0)
                                 {
 
-                                    Debug.Print("Count=" + (count - 1) + " x=" + previous);
+                                    Debug.WriteLine("Count=" + (count - 1) + " x=" + previous);
 
                                     // Start of pulse identified
                                     max = double.MinValue;
@@ -377,7 +508,7 @@ namespace TapeLibrary
                                 else if (mid > 0)
                                 {
 
-                                    Debug.Print("Count=" + (count - 1) + " x=" + previous);
+                                    Debug.WriteLine("Count=" + (count - 1) + " x=" + previous);
                                     
                                     // Start of pulse identified
                                     end = count - 1 - previous / (-previous + x);
@@ -393,7 +524,6 @@ namespace TapeLibrary
 
                                             if (start <= end)
                                             {
-
                                                 _data.Add(new Cycle(start / _wave.SampleRate, mid / _wave.SampleRate, end / _wave.SampleRate, max, min));
 
                                                 // What needs to happen is that start, mid and end are converted into seconds
@@ -401,10 +531,7 @@ namespace TapeLibrary
                                                 // reading a tap file and then saving it will do another conversion
                                                 // 
 
-
-
-
-                                                Console.WriteLine("offset=" + span + " wavelength=" + (end - start) + " min=" + min + " max=" + max);
+                                                Debug.WriteLine("offset=" + span + " wavelength=" + (end - start) + " min=" + min + " max=" + max);
                                             }
                                             else
                                             {
@@ -424,7 +551,6 @@ namespace TapeLibrary
                             }
                         }
 
-
                         if (rising == false)
                         {
                             if ((previous > 0) && (x <= 0)) // Fix issue where x is actually zero
@@ -432,7 +558,7 @@ namespace TapeLibrary
                                 if ((start > 0) && (mid == 0))
                                 {
 
-                                    Debug.Print("Count=" + count + " x=" + x);
+                                    Debug.WriteLine("Count=" + count + " x=" + x);
 
                                     mid = count - 1 + previous / (previous - x);
 
@@ -453,7 +579,7 @@ namespace TapeLibrary
                                 min = x;
                             }
 
-                            Debug.Print("time=" + span + " x=" + x + " rising=" + rising);
+                            Debug.WriteLine("Time=" + span + " x=" + x + " Rising=" + rising);
 
                         }
 
@@ -529,12 +655,11 @@ namespace TapeLibrary
                 byte interval;
                 double wavelength = cycle.End - cycle.Start;
 
-
                 // Look at options to adjust the cycle length based on the amplitude of the wave.
                 // It appears that the hugher cycles have a lower amplitude.
+                // Need to check on rounding as hving issues converting forwards and backwards to get the same resule
 
-
-                UInt32 cycleLength = (UInt32)(wavelength * _clockFrequency / 8);   // in clock cycles
+                UInt32 cycleLength = (UInt32)(Math.Round(wavelength * _clockFrequency / 8));   // in clock cycles
 
                 if (cycleLength > 255)
                 {
@@ -550,8 +675,6 @@ namespace TapeLibrary
                         binaryWriter.Write(interval);                           // Write the data
                         binaryWriter.Write(bytes, 0, 3);                        // Only write 24 bits of data
                         length = (UInt16)(length + 3);
-
-                        Console.WriteLine("offset=" + span + " wavelength=" + wavelength);
                     }
                 }
                 else
@@ -559,9 +682,6 @@ namespace TapeLibrary
                     interval = (byte)cycleLength;
                     previous = interval;
                     binaryWriter.Write(interval);              // Write the data
-
-                    Console.WriteLine("offset=" + span + " wavelength=" + wavelength);
-
                 }
             }
 
@@ -625,74 +745,6 @@ namespace TapeLibrary
                         byte interval = binaryReader.ReadByte();
                         double cycles = 0;
 
-                        // Test aligning to specific values
-
-
-                        //if ((interval > 50) && (interval < 60))
-                        //{
-                        //    interval = 52;  // 
-                        //}
-                        //else if ((interval >= 60) && (interval < 80))
-                        //{
-                        //    if (previous >= interval)
-                        //    {
-                        //        interval = 104;
-                        //    }
-                        //    else
-                        //    {
-                        //        interval = 52;
-                        //    }
-                        //}
-                        //else if ((interval >= 80) && (interval < 90))
-                        //{
-                        //    if (previous <= interval)
-                        //    {
-                        //        interval = 52;
-                        //    }
-                        //    else
-                        //    {
-                        //        interval = 104;
-                        //    }
-                        //}
-                        //else if ((interval >= 90) && (interval < 110))
-                        //{
-                        //    interval = 104;
-                        //}
-
-                        previous = interval;
-
-                        //switch (interval)
-                        //{
-                        //    case 48: // 0x30
-                        //    case 49: // 0x31
-                        //    case 50: // 0x32
-                        //    case 51: // 0x33
-                        //    case 53: // 0x35
-                        //    case 54: // 0x36
-                        //    case 55: // 0x37
-                        //        {
-                        //            interval = 52;
-                        //            break;
-                        //        }
-                        //    case 102: // 0x66
-                        //    case 103: // 0x67
-                        //    case 105: // 0x69
-                        //    case 106: // 0x6a
-                        //    case 107: // 0x6b
-                        //    case 108: // 0x6c
-                        //    case 109: // 0x6d
-                        //        {
-                        //            interval = 104;
-                        //            break;
-                        //        }
-                        //}
-
-                        // Convert back into seconds
-                        // but issue i have is this is not the wave 
-                        // sample intervals, so dont like the approach
-                        // with the cycles object hold two different types of value
-                        // 
-
                         if (interval == 0)
                         {
                             if (_version == 0)
@@ -711,6 +763,11 @@ namespace TapeLibrary
                         }
                         else
                         {
+                            if (count == (91072)) // 91092 - 20
+                            {
+                                interval = 104;
+                            }
+
                             cycles = interval * 8;
                             cycles = (double)(cycles / _clockFrequency);
                         }
@@ -722,17 +779,23 @@ namespace TapeLibrary
                         _data.Add(cycle);
                     }
                     errorCode = 0;
+
                 }
             }
             catch
             {
                 errorCode = 1;
             }
-            binaryReader.Close();
-            binaryReader.Dispose();
+
+            if (binaryReader != null)
+            {
+                binaryReader.Close();
+                binaryReader.Dispose();
+            }
 
             return (errorCode);
         }
+
 
         public IEnumerator GetEnumerator()
         {

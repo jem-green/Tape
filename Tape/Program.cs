@@ -73,7 +73,7 @@ namespace TapeConsole
         static void Tap2Code(string filename, int version, int frequency, double start, double end, int baud)
         {
             string path = Path.GetDirectoryName(filename);
-            string name = Path.GetFileName(filename);
+            string name = Path.GetFileName(filename).Trim();
             Tape tape = new Tape
             {
                 Version = version,
@@ -81,9 +81,12 @@ namespace TapeConsole
                 End = new TimeSpan(Convert.ToInt64(1e7 * end))      // Should now be in ticks from seconds
             };
             tape.Read(path, name);
+
             TapeLibrary.Code program = new TapeLibrary.Code(tape)
             {
-                BaudRate = baud
+                BaudRate = baud,
+                Start = new TimeSpan(Convert.ToInt64(1e7 * start)),  // Should now be in ticks from seconds
+                End = new TimeSpan(Convert.ToInt64(1e7 * end))      // Should now be in ticks from seconds
             };
             program.Convert();
             program.Write(path, name, true);
@@ -103,7 +106,7 @@ namespace TapeConsole
                 End = new TimeSpan(Convert.ToInt64(1e7 * end)),         // Should now be in ticks from seconds
                 Version = version
             };
-            tape.Analyse();
+            tape.Convert();
 
             SortedDictionary<int, double> histogram = new SortedDictionary<int, double>();
             for (int i = 0; i <= 256; i++)
@@ -213,7 +216,7 @@ namespace TapeConsole
         static void Wave2Tape(string filename, int version, int frequency, double start, double end)
         {
             string path = Path.GetDirectoryName(filename);
-            string name = Path.GetFileName(filename);
+            string name = Path.GetFileName(filename).Trim();
             Wave wave = new Wave(path, name);
             wave.Read();
             Tape tape = new Tape(wave)
@@ -222,7 +225,7 @@ namespace TapeConsole
                 End = new TimeSpan(Convert.ToInt64(1e7 * end)),         // Should now be in ticks from seconds
                 Version = version
             };
-            tape.Analyse();
+            tape.Convert();
             tape.Write(path, name, true);
         }
     }
