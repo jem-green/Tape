@@ -1,8 +1,0 @@
-{
-  "profiles": {
-    "TapeConsole": {
-      "commandName": "Project",
-      "commandLineArgs": "\"D:\\MEDIA\\COMPUTER\\good-example.wav\" --start=0 --end=0 --version=0 --frequency=1000000 code"
-    }
-  }
-}

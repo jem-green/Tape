@@ -1,23 +1,23 @@
 # Tape
-### Kansas City Tape utility
+## Kansas City Tape Utility:
 
 - Process wav files into a tap format
 - Process tap files into ASCII characters
 
 ### Usage:
-TapeConsole [options] <filename> [command]
+TapeConsole [options] \<filename\> \[command\]
 
 ### Arguments:
-<filename>
+\<filename\>
 
 ### Options:
-/v, --version <version>			The tape version
+/v, --version \<version\>		The tape version
   
-/f, --frequency <frequency>		The processor frequency in Hz
+/F, --frequency \<frequency\>	The processor frequency in Hz
   
-/S, --start <start>				Offset to start of data in seconds
+/S, --start \<start\>			Offset to start of data in seconds
   
-/E, --end <end>					Offset to end of data in seconds
+/E, --end \<end\>				Offset to end of data in seconds
 
 ### Commands:
  wavelength   Generate a wavelength histogram
@@ -28,4 +28,18 @@ TapeConsole [options] <filename> [command]
  
  code         Generate ascii format file
 
-/B, --baud <baud rate>			The baudrate in Hz
+---
+
+## code
+ Generate ascii format file
+
+### Usage
+TapeConsole \<filename\> code \[options\]
+
+### Arguments
+  \<filename\>
+
+### Options
+/B, --baud \<baud\>        Baud rate
+
+/O, --output \<output\>    The Output filename
