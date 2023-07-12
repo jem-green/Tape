@@ -11,7 +11,7 @@ TapeConsole [options] \<filename\> \[command\]
 \<filename\>
 
 ### Options:
-/v, --version \<version\>		The tape version
+/v, --version \<version\>		The tap version
   
 /F, --frequency \<frequency\>	The processor frequency in Hz
   
@@ -24,7 +24,7 @@ TapeConsole [options] \<filename\> \[command\]
  
  amplitude    Generate a amplitude histogram
  
- tape         Generate tape format file
+ tape         Generate tap format file
  
  code         Generate ascii format file
 
